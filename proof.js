@@ -46,13 +46,15 @@
     /
     */
     function obtenerStorage (target) {
-        // set nuevo valor
-        if (!GM_getValue(target.get(0).baseURI,false)){
-            GM_setValue(target.get(0).baseURI, JSON.stringify([]) );
+        // set nuevo valor ( deberia ser target.get(0).baseURI )
+        if (!GM_getValue('test',false)){
+            GM_setValue('test', JSON.stringify({}) );
         }
-        return JSON.parse(GM_getValue(target.get(0).baseURI,false));
+        //var resp = JSON.parse(GM_getValue(target.get(0).baseURI,false))
+        var resp = JSON.parse(GM_getValue('test',false));
+        return resp;
         //set nuevo elemento a registrar bajo esa uri
-       /* if( !r[target.get(0)]  ){
+        /* if( !r[target.get(0)]  ){
             r[target.get(0)] = [];
         }
         return r[target.get(0)];
@@ -67,23 +69,41 @@
     function actualizarStorage( target ) {
         // Recupero el objeto
         var s = obtenerStorage(target);
+        var xpath = getPathTo(target.get(0));
         //var arr = s[target.get(0)] ?  s[target.get(0)] : [];
 
-        if( true ) // obtiene la posicion del elemento
-            s.push = { el : target.get(0).outerHTML , snapShot : [] };
+        if( !s.captures ) // Si no hay capturas en este sitio la creo
+        {
+            s.captures = [];
+        } // Tiene capturas ,reviso el xpath del elem
+            //s.captures  = JSON.parse(s.captures);
+        var capture = s.captures.find(function(e){
+            return e.xpath == xpath;
+        });
+        if ( !capture ){
+            capture = {  xpath : xpath, snapShots : [] } ;
+            s.captures.push ( capture );
+        }
+        //if ( capture.snapShots.length > 0 ) // tiene capturas previas las deserealizo
+        //    capture.snapShots = JSON.parse(capture.snapShots);
+        capture.snapShots.push(target.get(0).outerHTML);
+
+
+        //s.captures = { el : target.get(0).outerHTML , snapShot : [] };
         //s[1].snapShot.push(target.get(0).outerHTML());
         //s[target.get(0)].push(target.get(0).outerHTML());
-        return GM_setValue(target.get(0).baseURI, JSON.stringify( s) );
+        console.log ( ' Element updated');
+        return GM_setValue('test', JSON.stringify( s) );
     }
 
     function registrarEventos(target){
         // clean store
         //GM_setValue(target.get(0).baseURI, null);
         var observer = new MutationObserver(function(mutations) {
-           // mutations.forEach(function(mutation) {
-                //              for (var i = 0; i < mutation.addedNodes.length; i++)
-                //                    insertedNodes.push(mutation.addedNodes[i]);
-             //   console.log(mutation);
+            // mutations.forEach(function(mutation) {
+            //              for (var i = 0; i < mutation.addedNodes.length; i++)
+            //                    insertedNodes.push(mutation.addedNodes[i]);
+            //   console.log(mutation);
             //});
             if ( target.get(0)){
                 //var s = crearStorage(target);
@@ -97,12 +117,58 @@
 
     function seleccionarElemento(){
         //GM_setValue('tgSel', !GM_getValue('tgSel', false));
-       /// console.log('seleccionando: ' + GM_getValue('tgSel', false));
+        /// console.log('seleccionando: ' + GM_getValue('tgSel', false));
         //GM_notification(details, ondone), GM_notification(text, title, image, onclick)
         $('body').on('click',insertControl);
     }
 
+    /*
+    function getXPathForElement(el, xml) {
+        var xpath = '';
+        var pos, tempitem2;
 
+        while(el !== xml.documentElement) {
+            pos = 0;
+            tempitem2 = el;
+            while(tempitem2) {
+                if (tempitem2.nodeType === 1 && tempitem2.nodeName === el.nodeName) { // If it is ELEMENT_NODE of the same name
+                    pos += 1;
+                }
+                tempitem2 = tempitem2.previousSibling;
+            }
+
+            xpath = "*[name()='"+el.nodeName+"' and namespace-uri()='"+(el.namespaceURI===null?'':el.namespaceURI)+"']["+pos+']'+'/'+xpath;
+
+            el = el.parentNode;
+        }
+        xpath = '/*'+"[name()='"+xml.documentElement.nodeName+"' and namespace-uri()='"+(el.namespaceURI===null?'':el.namespaceURI)+"']"+'/'+xpath;
+        xpath = xpath.replace(/\/$/, '');
+        return xpath;
+    }
+*/
+
+    function getPathTo(element) {
+        //if (element.id!=='')      return "//*[@id='"+element.id+"']";
+
+        if (element===document.body)
+            return element.tagName.toLowerCase();
+
+        var ix= 0;
+        var siblings= element.parentNode.childNodes;
+        for (var i= 0; i<siblings.length; i++) {
+            var sibling= siblings[i];
+
+            if (sibling===element) return getPathTo(element.parentNode) + '/' + element.tagName.toLowerCase() + '[' + (ix + 1) + ']';
+
+            if (sibling.nodeType===1 && sibling.tagName === element.tagName) {
+                ix++;
+            }
+        }
+    }
+
+    function getElementByXpath(path) {
+        return document.evaluate(path, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+    }
 
     GM_registerMenuCommand('Seleccionar Elemento', seleccionarElemento, 'n');
 
@@ -112,4 +178,6 @@
         ".selected-tmp:hover {    border: 2px solid #e3e3e3;} " +
         ".selected-tmp:hover .el-control { opacity: 1}"
     );
+
+    console.log ( ' script rdy' );
 })();
