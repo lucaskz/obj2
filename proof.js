@@ -34,7 +34,7 @@
         // Inserto algunos controles
         //target.append('<input type="button" class="el-control" value="Open" id="CP">');
         target.addClass('selected-tmp');
-        target.append('<div class="el-control"> <i class="fa fa-chevron-left" aria-hidden="true"></i> <i class="fa fa-chevron-right" aria-hidden="true"></i> <i class="fa fa-times" aria-hidden="true"></i> </div>');
+        target.append('<div class="el-control"> <i class="fa fa-history history" title="Historial" aria-hidden="true"></i> <i class="fa fa-times unbind" title="Eliminar" aria-hidden="true"></i> </div>');
         registrarEventos(target);
         //GM_addValueChangeListener(target, valueChanged);
 
@@ -47,11 +47,11 @@
     */
     function obtenerStorage (target) {
         // set nuevo valor ( deberia ser target.get(0).baseURI )
-        if (!GM_getValue('test',false)){
-            GM_setValue('test', JSON.stringify({}) );
+        if (!GM_getValue(target.get(0).baseURI, false)){
+            GM_setValue(target.get(0).baseURI, JSON.stringify({}) );
         }
         //var resp = JSON.parse(GM_getValue(target.get(0).baseURI,false))
-        var resp = JSON.parse(GM_getValue('test',false));
+        var resp = JSON.parse(GM_getValue(target.get(0).baseURI, false));
         return resp;
         //set nuevo elemento a registrar bajo esa uri
         /* if( !r[target.get(0)]  ){
@@ -93,10 +93,77 @@
         //s[1].snapShot.push(target.get(0).outerHTML());
         //s[target.get(0)].push(target.get(0).outerHTML());
         console.log ( ' Element updated');
-        return GM_setValue('test', JSON.stringify( s) );
+        return GM_setValue(target.get(0).baseURI, JSON.stringify( s ));
+    }
+
+    function eliminarStorage( target){
+        var s = GM_getValue(target.get(0).baseURI, false);
+         if ( s ){
+             s = JSON.parse(s);
+             if ( s.captures ) {
+                 var xpath = getPathTo(target.get(0));
+                 if( typeof s.captures == "string" ){
+                     s.captures = JSON.parse( s.captures );
+                 }
+                 var capture = s.captures.find(function(e){
+                     return e.xpath == xpath;
+                 });
+                 if( capture ){
+                     var index = s.captures.indexOf(capture);
+                     s.captures.splice(capture, 1);
+                     GM_setValue(target.get(0).baseURI, JSON.stringify( s ));
+
+                 }
+             }
+         }
+    }
+
+    function showHistory (target){
+        // Dejo la deteccion de cambios en espera..
+        target.trigger('disconnect');
+        target.find('.el-control').addClass('history-mode');
+        var s = obtenerStorage(target);
+        // Fix temporal para json parse ?
+        if ( typeof s.captures == "string" )
+            s.captures = JSON.parse(s.captures);
+        target.append('<div class="el-history-control" el="' + s.captures.length +'"> <i class="fa fa-chevron-left" title="anterior estado" aria-hidden="true"></i> <i class="fa fa-chevron-right" title"siguiente estado" aria-hidden="true"></i> <i class="fa fa-level-up back" title="Volver" aria-hidden="true"></i> </div>');
+        target.find('.next').on('click',function(){
+            nextElement(target);
+        });
+        target.find('.prev').on('click',function(){
+            prevElement(target);
+        });
+        target.find('.back').on('click', function(){
+            // Vuelvo a mostrar los controles originales y detectar cambios
+            target.find('.el-history-control').remove();
+            target.find('.el-control').removeClass('history-mode');
+            target.trigger('reconnect');
+        });
+
+    }
+
+    function nextElement(target){
+
+        //Test slide?
+        /*
+        $('#slidemarginleft button').click(function() {
+            var $marginLefty = $(this).next();
+            $marginLefty.animate({
+                marginLeft: parseInt($marginLefty.css('marginLeft'),10) == 0 ?
+                $marginLefty.outerWidth() :
+                0
+            });
+        });
+        */
+    }
+
+    function prevElement(target){
+
     }
 
     function registrarEventos(target){
+        target.find('.unbind').on('click', function(){unbindElement(target);});
+        target.find('.history').on('click', function(){showHistory(target);});
         // clean store
         //GM_setValue(target.get(0).baseURI, null);
         var observer = new MutationObserver(function(mutations) {
@@ -112,7 +179,23 @@
                 actualizarStorage(target);
             }
         });
+         // futuras operaciones
+        target.on('disconnect',function(){
+            observer.disconnect();
+        });
+        target.on('reconnect',function(){
+            observer.observe(target.get(0), { attributes: true, childList: true, characterData: true , subtree:true , characterDataOldValue: true});
+        });
         observer.observe(target.get(0), { attributes: true, childList: true, characterData: true , subtree:true , characterDataOldValue: true});
+    }
+
+    function unbindElement(target){
+        if( confirm('¿Eliminar elemento?') ){
+            eliminarStorage(target);
+            target.trigger('disconnect');
+            target.removeClass('selected-tmp');
+            target.find('.el-control').remove();
+        }
     }
 
     function seleccionarElemento(){
@@ -173,10 +256,12 @@
     GM_registerMenuCommand('Seleccionar Elemento', seleccionarElemento, 'n');
 
     GM_addStyle (
-        ".el-control{     right: 1%;    z-index: 9999;    bottom: -5%;    padding: 5px;    color: #333;    text-align: center; position: absolute; opacity: 0}" +
-        ".el-control i { font-size: 1.5em }" +
+        ".el-control, .el-history-control {     right: 1%;    z-index: 9999;    bottom: -5%;    padding: 5px;    color: #333;    text-align: center; position: absolute; opacity: 0}" +
+        ".el-control, .el-history-control i { font-size: 1.5em; cursor : pointer }" +
         ".selected-tmp:hover {    border: 2px solid #e3e3e3;} " +
-        ".selected-tmp:hover .el-control { opacity: 1}"
+        ".selected-tmp:hover .el-control { opacity: 1}"+
+        ".selected-tmp:hover .el-history-control { opacity: 1}"+
+        ".history-mode { display:none }"
     );
 
     console.log ( ' script rdy' );
