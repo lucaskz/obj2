@@ -14,10 +14,22 @@
 
 // @require http://code.jquery.com/jquery-latest.js
 // @require https://use.fontawesome.com/f4f6b143ec.js
+// @require https://raw.githubusercontent.com/JulienCabanes/jquery.htmlize/master/jquery.htmlize.js
 // ==/UserScript==
 
 (function() {
     'use strict';
+
+    function setBorderOnEnter(){
+        var border = $(this).css("border");
+        
+        $(this).css("border","1px solid red");
+        $(this).on('mouseout' , function(){
+            $(this).css("border", border);
+            $(this).off('mouseout');
+
+        });
+    }
 
     function valueChanged(name, old_value, new_value, remote) {
         console.log('name: ' + name);
@@ -37,8 +49,9 @@
         target.append('<div class="el-control"> <i class="fa fa-history history" title="Historial" aria-hidden="true"></i> <i class="fa fa-times unbind" title="Eliminar" aria-hidden="true"></i> </div>');
         registrarEventos(target);
         //GM_addValueChangeListener(target, valueChanged);
-
+        $("body *").off('mouseenter', setBorderOnEnter);
         $('body').off('click',insertControl);
+
     }
 
     /*
@@ -76,7 +89,9 @@
         {
             s.captures = [];
         } // Tiene capturas ,reviso el xpath del elem
-            //s.captures  = JSON.parse(s.captures);
+        //s.captures  = JSON.parse(s.captures);
+        if ( typeof s.captures == "string" )
+            s.captures = JSON.parse(s.captures);
         var capture = s.captures.find(function(e){
             return e.xpath == xpath;
         });
@@ -86,7 +101,9 @@
         }
         //if ( capture.snapShots.length > 0 ) // tiene capturas previas las deserealizo
         //    capture.snapShots = JSON.parse(capture.snapShots);
-        capture.snapShots.push(target.get(0).outerHTML);
+        var node = target.get(0).cloneNode(true);
+        $(node).find('.el-control').remove();
+        capture.snapShots.push($(node).htmlize());
 
 
         //s.captures = { el : target.get(0).outerHTML , snapShot : [] };
@@ -98,24 +115,24 @@
 
     function eliminarStorage( target){
         var s = GM_getValue(target.get(0).baseURI, false);
-         if ( s ){
-             s = JSON.parse(s);
-             if ( s.captures ) {
-                 var xpath = getPathTo(target.get(0));
-                 if( typeof s.captures == "string" ){
-                     s.captures = JSON.parse( s.captures );
-                 }
-                 var capture = s.captures.find(function(e){
-                     return e.xpath == xpath;
-                 });
-                 if( capture ){
-                     var index = s.captures.indexOf(capture);
-                     s.captures.splice(capture, 1);
-                     GM_setValue(target.get(0).baseURI, JSON.stringify( s ));
+        if ( s ){
+            s = JSON.parse(s);
+            if ( s.captures ) {
+                var xpath = getPathTo(target.get(0));
+                if( typeof s.captures == "string" ){
+                    s.captures = JSON.parse( s.captures );
+                }
+                var capture = s.captures.find(function(e){
+                    return e.xpath == xpath;
+                });
+                if( capture ){
+                    var index = s.captures.indexOf(capture);
+                    s.captures.splice(capture, 1);
+                    GM_setValue(target.get(0).baseURI, JSON.stringify( s ));
 
-                 }
-             }
-         }
+                }
+            }
+        }
     }
 
     function showHistory (target){
@@ -126,14 +143,14 @@
         // Fix temporal para json parse ?
         if ( typeof s.captures == "string" )
             s.captures = JSON.parse(s.captures);
-        target.append('<div class="el-history-control" el="' + s.captures.length +'"> <i class="fa fa-chevron-left" title="anterior estado" aria-hidden="true"></i> <i class="fa fa-chevron-right" title"siguiente estado" aria-hidden="true"></i> <i class="fa fa-level-up back" title="Volver" aria-hidden="true"></i> </div>');
+        target.append('<div class="el-history-control" el="' + (s.captures.length - 1) +'"> <i class="fa fa-chevron-left prev" title="anterior estado" aria-hidden="true"></i> <i class="fa fa-chevron-right next" title"siguiente estado" aria-hidden="true"></i> <i class="fa fa-level-up back" title="Volver" aria-hidden="true"></i> </div>');
         target.find('.next').on('click',function(){
             nextElement(target);
         });
         target.find('.prev').on('click',function(){
             prevElement(target);
         });
-        target.find('.back').on('click', function(){
+        target.find('.volver').on('click', function(){
             // Vuelvo a mostrar los controles originales y detectar cambios
             target.find('.el-history-control').remove();
             target.find('.el-control').removeClass('history-mode');
@@ -143,6 +160,43 @@
     }
 
     function nextElement(target){
+        var s = obtenerStorage(target);
+        if ( typeof s.captures == "string" )
+            s.captures = JSON.parse(s.captures);
+        var index = $(target).find('.el-history-control').attr('el'),
+            xpath = getPathTo(target.get(0));
+
+        var capture = s.captures.find(function(e){
+            return e.xpath == xpath;
+        });
+        var node = capture.snapShots[parseInt(index) + 1];
+        if( !node )
+            return null;
+        // nodo de control;
+        var controlNode = $(target).find('.el-control').get(0).cloneNode(true),
+            historyNode = $(target).find('.el-history-control').get(0).cloneNode(true);
+        $(controlNode).addClass('history-mode');
+        $(historyNode).attr('el', parseInt(index) + 1);
+        // html node
+        node = $(node);
+        $(node).append(controlNode);
+        $(node).append(historyNode);
+        // slide derecho
+        target.animate({  marginLeft: parseInt(target.css('marginLeft'), 10) === 0 ? target.outerWidth() : 0 }, function(){
+            target.get(0).replaceWith(node.get(0));
+            node.find('.next').on('click',function(){
+                nextElement(node);
+            });
+            node.find('.prev').on('click',function(){
+                prevElement(node);
+            });
+            node.find('.volver').on('click', function(){
+                // Vuelvo a mostrar los controles originales y detectar cambios
+                node.find('.el-history-control').remove();
+                node.find('.el-control').removeClass('history-mode');
+                node.trigger('reconnect');
+            });
+        });
 
         //Test slide?
         /*
@@ -158,7 +212,44 @@
     }
 
     function prevElement(target){
+        var s = obtenerStorage(target);
+        if ( typeof s.captures == "string" )
+            s.captures = JSON.parse(s.captures);
+        var index = $(target).find('.el-history-control').attr('el'),
+            xpath = getPathTo(target.get(0));
 
+        var capture = s.captures.find(function(e){
+            return e.xpath == xpath;
+        });
+        var node = capture.snapShots[parseInt(index) - 1];
+        if( !node )
+            return null;
+        // nodo de control;
+        var controlNode = $(target).find('.el-control').get(0).cloneNode(true),
+            historyNode = $(target).find('.el-history-control').get(0).cloneNode(true);
+        $(controlNode).addClass('history-mode');
+        $(historyNode).attr('el', parseInt(index) - 1);
+        // html node
+        node = $(node);
+        $(node).addClass('selected-tmp');
+        $(node).append(controlNode);
+        $(node).append(historyNode);
+        // slide derecho
+        target.animate({  marginLeft: parseInt(target.css('marginLeft'), 10) === 0 ? target.outerWidth() : 0 }, function(){
+            target.get(0).replaceWith(node.get(0));
+            node.find('.next').on('click',function(){
+                nextElement(node);
+            });
+            node.find('.prev').on('click',function(){
+                prevElement(node);
+            });
+            node.find('.volver').on('click', function(){
+                // Vuelvo a mostrar los controles originales y detectar cambios
+                node.find('.el-history-control').remove();
+                node.find('.el-control').removeClass('history-mode');
+                node.trigger('reconnect');
+            });
+        });
     }
 
     function registrarEventos(target){
@@ -179,7 +270,7 @@
                 actualizarStorage(target);
             }
         });
-         // futuras operaciones
+        // futuras operaciones
         target.on('disconnect',function(){
             observer.disconnect();
         });
@@ -202,8 +293,18 @@
         //GM_setValue('tgSel', !GM_getValue('tgSel', false));
         /// console.log('seleccionando: ' + GM_getValue('tgSel', false));
         //GM_notification(details, ondone), GM_notification(text, title, image, onclick)
-        $('body').on('click',insertControl);
+        // Bind Selector
+        $("body *").on({
+            'mouseenter': setBorderOnEnter
+        });
+        $('body').on('click', insertControl);
     }
+
+
+    /*
+
+    */
+
 
     /*
     function getXPathForElement(el, xml) {
@@ -258,7 +359,7 @@
     GM_addStyle (
         ".el-control, .el-history-control {     right: 1%;    z-index: 9999;    bottom: -5%;    padding: 5px;    color: #333;    text-align: center; position: absolute; opacity: 0}" +
         ".el-control, .el-history-control i { font-size: 1.5em; cursor : pointer }" +
-        ".selected-tmp:hover {    border: 2px solid #e3e3e3;} " +
+        ".selected-tmp:hover {    border: 2px solid #e3e3e3 !important;} " +
         ".selected-tmp:hover .el-control { opacity: 1}"+
         ".selected-tmp:hover .el-history-control { opacity: 1}"+
         ".history-mode { display:none }"
